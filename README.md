@@ -59,7 +59,7 @@ dsh plugin --profile web add dock-spreadsheet
 dsh plugin --profile web add link:/absolute/path/to/dock-spreadsheet
 ```
 
-加载器通过 profile 的 `node_modules` 解析 bundle，因此安装必须真正落到该目录（`node_modules/dock-spreadsheet` 可解析），仅修改 `dsh.profile.bundles` 不足以加载。**安装后必须由用户重启 dsh web 才会激活**：插件集合的变更在重启时生效，不要用重启替代验证。
+加载器通过 profile 的 `node_modules` 解析 bundle，因此安装必须真正落到该目录（`node_modules/dock-spreadsheet` 可解析），仅修改 `dsh.profile.bundles` 不足以加载。安装要求 profile 目录可写：若该路径位于只读挂载（`/` 为 `ro` 时 `~/.dsh` 就在其上），需先让文件系统可写，否则链接创建会以 `EROFS` 失败。**安装后必须由用户重启 dsh web 才会激活**：插件集合的变更在重启时生效，不要用重启替代验证。
 
 ## License
 
