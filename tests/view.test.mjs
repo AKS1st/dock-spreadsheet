@@ -1,0 +1,134 @@
+import assert from 'node:assert/strict'
+import { test } from 'node:test'
+import { readFile } from 'node:fs/promises'
+import { runInThisContext } from 'node:vm'
+import { JSDOM } from 'jsdom'
+import React, { act } from 'react'
+import { utils, write } from 'xlsx'
+
+const book = utils.book_new()
+utils.book_append_sheet(book, utils.aoa_to_sheet([['<b>literal</b>', 'Alpha'], ['row 2', 'Beta']]), 'First')
+utils.book_append_sheet(book, utils.aoa_to_sheet([['second sheet']]), 'Second')
+const bytes = write(book, { type: 'buffer', bookType: 'xlsx' })
+
+const GLOBALS = ['window', 'document', 'navigator', 'HTMLElement', 'Element', 'Node',
+  'Event', 'CustomEvent', 'MouseEvent', 'MutationObserver', 'getComputedStyle',
+  'requestAnimationFrame', 'cancelAnimationFrame']
+
+/** Publish the jsdom realm as globals so the browser bundle runs against it. */
+function installDom(dom) {
+  const prior = new Map()
+  for (const key of [...GLOBALS, 'fetch']) {
+    prior.set(key, Object.getOwnPropertyDescriptor(globalThis, key))
+    const value = key === 'fetch'
+      ? async () => ({ ok: true, arrayBuffer: async () => bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) })
+      : key === 'getComputedStyle' ? dom.window.getComputedStyle.bind(dom.window)
+        : key === 'requestAnimationFrame' ? (callback) => setTimeout(callback, 0)
+          : key === 'cancelAnimationFrame' ? clearTimeout
+            : dom.window[key]
+    Object.defineProperty(globalThis, key, { value, configurable: true, writable: true })
+  }
+  return () => {
+    for (const [key, descriptor] of prior) {
+      if (descriptor) Object.defineProperty(globalThis, key, descriptor)
+      else delete globalThis[key]
+    }
+  }
+}
+
+/** jsdom reports every element as zero-sized, which makes Tabulator's virtual DOM render no rows. */
+function giveLayoutBoxes(dom) {
+  for (const [property, value] of [['clientWidth', 800], ['clientHeight', 400], ['offsetWidth', 800], ['offsetHeight', 400]]) {
+    Object.defineProperty(dom.window.HTMLElement.prototype, property, { configurable: true, get() { return value } })
+  }
+  dom.window.Element.prototype.getBoundingClientRect = () => (
+    { x: 0, y: 0, top: 0, left: 0, right: 800, bottom: 400, width: 800, height: 400, toJSON() { return this } }
+  )
+}
+
+/** Let React effects, the fetch stub and Tabulator's async rendering settle. */
+const settle = async () => {
+  await act(async () => { await new Promise((resolve) => setTimeout(resolve, 50)) })
+}
+
+/** Rendered virtual-DOM rows as arrays of cell texts. */
+const rows = (dom) => [...dom.window.document.querySelectorAll('.tabulator-row')]
+  .map((row) => [...row.querySelectorAll('.tabulator-cell')].map((cell) => cell.textContent))
+
+/** React tracks input values, so drive the native setter before dispatching. */
+const setInput = async (dom, input, value) => {
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype, 'value').set.call(input, value)
+    input.dispatchEvent(new dom.window.Event('input', { bubbles: true }))
+  })
+  await settle()
+}
+
+test('real React view mounts Tabulator, searches, sorts and switches sheets', async () => {
+  const dom = new JSDOM('<!doctype html><html><head></head><body><div id="root"></div></body></html>', { url: 'http://localhost/' })
+  giveLayoutBoxes(dom)
+  const restore = installDom(dom)
+  globalThis.IS_REACT_ACT_ENVIRONMENT = true
+  // react-dom must be evaluated once the jsdom globals exist, otherwise its
+  // event system binds to no document and dispatched events never reach React.
+  const { createRoot } = await import('react-dom/client')
+  let plugin, root
+  try {
+    dom.window.__ModuleLoader__ = { load(entry) { plugin = entry.factory((id) => {
+      assert.equal(id, 'react', `unexpected external browser require: ${id}`)
+      return React
+    }) } }
+    runInThisContext(await readFile(new URL('../lib/client.js', import.meta.url), 'utf8'))
+
+    let component
+    plugin.apply({
+      get(name) { return name === 'files' ? { registerFileViewer() { return () => {} } }
+        : { registerPlugin() { return () => {} }, registerEditorView(def) { component = def.component; return () => {} } } },
+      effect(register) { register() },
+    })
+    assert.equal(typeof component, 'function')
+
+    root = createRoot(dom.window.document.getElementById('root'))
+    await act(async () => {
+      root.render(React.createElement(component, { seed: { path: '/tmp/example.xlsx' }, active: true, viewId: 'spreadsheet' }))
+    })
+    await settle()
+
+    assert.ok(dom.window.document.querySelector('.tabulator'), 'grid must mount')
+    assert.deepEqual([...dom.window.document.querySelectorAll('select option')].map((option) => option.value), ['First', 'Second'])
+    assert.deepEqual(rows(dom).map((cells) => cells[2]), ['Alpha', 'Beta'], 'cells render in worksheet order')
+    assert.equal(dom.window.document.querySelector('b'), null, 'cell HTML must never become a DOM element')
+
+    // Search box filters across columns.
+    const search = dom.window.document.querySelector('input[type=search]')
+    await setInput(dom, search, 'Beta')
+    await settle()
+    assert.deepEqual(rows(dom).map((cells) => cells[2]), ['Beta'], 'search must keep only matching rows')
+    await setInput(dom, search, '')
+    await settle()
+    assert.equal(rows(dom).length, 2, 'clearing the search must restore every row')
+
+    // A header click sorts the column: ascending first, then descending.
+    const header = (letter) => [...dom.window.document.querySelectorAll('.tabulator-col')]
+      .find((column) => column.textContent.trim() === letter)
+    const clickHeader = async () => {
+      await act(async () => { header('B').dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true })) })
+      await settle()
+    }
+    await clickHeader()
+    assert.deepEqual(rows(dom).map((cells) => cells[2]), ['Alpha', 'Beta'], 'ascending sort keeps data order here')
+    await clickHeader()
+    assert.deepEqual(rows(dom).map((cells) => cells[2]), ['Beta', 'Alpha'], 'descending sort must reorder rows')
+
+    // Switching worksheets rebuilds the grid from the other sheet.
+    const picker = dom.window.document.querySelector('select')
+    await act(async () => { picker.value = 'Second'; picker.dispatchEvent(new dom.window.Event('change', { bubbles: true })) })
+    await settle()
+    assert.deepEqual(rows(dom).map((cells) => cells[1]), ['second sheet'])
+  } finally {
+    if (root) await act(async () => root.unmount())
+    restore()
+    delete globalThis.IS_REACT_ACT_ENVIRONMENT
+    dom.window.close()
+  }
+})
