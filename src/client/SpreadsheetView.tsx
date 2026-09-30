@@ -1,7 +1,8 @@
 import { createElement, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { TabulatorFull as Tabulator, type ColumnDefinition } from 'tabulator-tables'
+import { TabulatorFull as Tabulator, type CellComponent, type ColumnDefinition } from 'tabulator-tables'
 import tabulatorCss from './tabulator-css.generated.ts'
 import { gridSheet, MAX_COLUMNS, MAX_ROWS, parseWorkbook } from './workbook.ts'
+import { splitLinks } from './links.ts'
 import type { ViewProps } from './contract.ts'
 import type { WorkBook } from 'xlsx'
 
@@ -18,6 +19,8 @@ const ownCss = `
 .ds-sheet .tabulator { height:100%; background:transparent; color:inherit }
 .ds-sheet .tabulator-header,.ds-sheet .tabulator-row { background:var(--dsw-alias-fill-primary,#fff); color:inherit }
 .ds-sheet .tabulator-row:nth-child(even) { background:var(--dsw-alias-fill-control,#f4f4f4) }
+.ds-sheet .ds-url { color:var(--dsw-alias-interactive-fg-accent,#0969da); text-decoration:underline; text-underline-offset:2px; cursor:pointer }
+.ds-sheet .ds-url:hover { text-decoration-thickness:2px }
 .ds-sheet-message { padding:16px; overflow:auto }
 `
 let styleUsers = 0
@@ -50,6 +53,40 @@ function applyTerm(table: Tabulator, term: string): void {
   }
   table.setFilter((row: Record<string, unknown>) =>
     Object.entries(row).some(([key, value]) => key !== 'rowLabel' && String(value).toLocaleLowerCase().includes(term)))
+}
+
+/**
+ * Render a cell as text nodes, turning detected URLs into anchors. Nodes are
+ * built with `textContent`, never `innerHTML`, so workbook content still cannot
+ * become markup.
+ *
+ * Each anchor owns its click handler: Tabulator only routes its column-level
+ * `cellClick` callback through the edit flow, which a read-only grid never
+ * enters. The handler opens the URL for Ctrl/⌘+click and swallows a plain click
+ * so the anchor never navigates on its own.
+ */
+function linkFormatter(cell: CellComponent): HTMLElement {
+  const wrapper = document.createElement('span')
+  wrapper.className = 'ds-cell'
+  for (const segment of splitLinks(String(cell.getValue() ?? ''))) {
+    if (segment.url === undefined) {
+      wrapper.append(document.createTextNode(segment.text))
+      continue
+    }
+    const anchor = document.createElement('a')
+    anchor.className = 'ds-url'
+    anchor.href = segment.url
+    anchor.target = '_blank'
+    anchor.rel = 'noopener noreferrer'
+    anchor.textContent = segment.text
+    anchor.title = `Ctrl/⌘+点击打开：${segment.url}`
+    anchor.addEventListener('click', (event) => {
+      event.preventDefault()
+      if (event.ctrlKey || event.metaKey) window.open(anchor.href, '_blank', 'noopener,noreferrer')
+    })
+    wrapper.append(anchor)
+  }
+  return wrapper
 }
 
 export function SpreadsheetView({ seed }: ViewProps): ReactNode {
@@ -100,7 +137,7 @@ export function SpreadsheetView({ seed }: ViewProps): ReactNode {
       { title: '#', field: 'rowLabel', width: 65, frozen: true, hozAlign: 'right', headerSort: false },
       ...sheet.columns.map((letter, index) => ({
         title: letter, field: `c${index}`, minWidth: 110, width: 160,
-        sorter: 'string' as const, headerFilter: 'input' as const, formatter: 'plaintext' as const,
+        sorter: 'string' as const, headerFilter: 'input' as const, formatter: linkFormatter,
       })),
     ]
     const table = new Tabulator(element, {

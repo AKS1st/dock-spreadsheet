@@ -7,7 +7,11 @@ import React, { act } from 'react'
 import { utils, write } from 'xlsx'
 
 const book = utils.book_new()
-utils.book_append_sheet(book, utils.aoa_to_sheet([['<b>literal</b>', 'Alpha'], ['row 2', 'Beta']]), 'First')
+utils.book_append_sheet(book, utils.aoa_to_sheet([
+  ['<b>literal</b>', 'Alpha'],
+  ['row 2', 'Beta'],
+  ['详见 https://example.com/docs, 谢谢', 'Gamma'],
+]), 'First')
 utils.book_append_sheet(book, utils.aoa_to_sheet([['second sheet']]), 'Second')
 const bytes = write(book, { type: 'buffer', bookType: 'xlsx' })
 
@@ -96,8 +100,29 @@ test('real React view mounts Tabulator, searches, sorts and switches sheets', as
 
     assert.ok(dom.window.document.querySelector('.tabulator'), 'grid must mount')
     assert.deepEqual([...dom.window.document.querySelectorAll('select option')].map((option) => option.value), ['First', 'Second'])
-    assert.deepEqual(rows(dom).map((cells) => cells[2]), ['Alpha', 'Beta'], 'cells render in worksheet order')
+    assert.deepEqual(rows(dom).map((cells) => cells[2]), ['Alpha', 'Beta', 'Gamma'], 'cells render in worksheet order')
     assert.equal(dom.window.document.querySelector('b'), null, 'cell HTML must never become a DOM element')
+
+    // A URL inside a cell becomes an anchor; the surrounding text stays intact.
+    const anchor = dom.window.document.querySelector('a.ds-url')
+    assert.ok(anchor, 'detected URL must render as an anchor')
+    assert.equal(anchor.textContent, 'https://example.com/docs')
+    assert.equal(anchor.getAttribute('href'), 'https://example.com/docs')
+    assert.equal(anchor.closest('.tabulator-cell').textContent, '详见 https://example.com/docs, 谢谢',
+      'text around the URL is preserved verbatim')
+    assert.match(anchor.title, /Ctrl/)
+
+    // Only Ctrl/⌘+click opens the link; a plain click must not navigate.
+    const opened = []
+    dom.window.open = (...args) => { opened.push(args); return null }
+    const click = (init) => anchor.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true, cancelable: true, ...init }))
+    assert.equal(click({}), false, 'plain click is swallowed so the anchor cannot navigate on its own')
+    assert.deepEqual(opened, [], 'plain click must not open anything')
+    click({ ctrlKey: true })
+    assert.deepEqual(opened, [['https://example.com/docs', '_blank', 'noopener,noreferrer']], 'Ctrl+click opens the URL in a new tab')
+    opened.length = 0
+    click({ metaKey: true })
+    assert.deepEqual(opened, [['https://example.com/docs', '_blank', 'noopener,noreferrer']], 'Cmd+click opens the URL on macOS')
 
     // Search box filters across columns.
     const search = dom.window.document.querySelector('input[type=search]')
@@ -106,7 +131,7 @@ test('real React view mounts Tabulator, searches, sorts and switches sheets', as
     assert.deepEqual(rows(dom).map((cells) => cells[2]), ['Beta'], 'search must keep only matching rows')
     await setInput(dom, search, '')
     await settle()
-    assert.equal(rows(dom).length, 2, 'clearing the search must restore every row')
+    assert.equal(rows(dom).length, 3, 'clearing the search must restore every row')
 
     // A header click sorts the column: ascending first, then descending.
     const header = (letter) => [...dom.window.document.querySelectorAll('.tabulator-col')]
@@ -116,9 +141,9 @@ test('real React view mounts Tabulator, searches, sorts and switches sheets', as
       await settle()
     }
     await clickHeader()
-    assert.deepEqual(rows(dom).map((cells) => cells[2]), ['Alpha', 'Beta'], 'ascending sort keeps data order here')
+    assert.deepEqual(rows(dom).map((cells) => cells[2]), ['Alpha', 'Beta', 'Gamma'], 'ascending sort keeps data order here')
     await clickHeader()
-    assert.deepEqual(rows(dom).map((cells) => cells[2]), ['Beta', 'Alpha'], 'descending sort must reorder rows')
+    assert.deepEqual(rows(dom).map((cells) => cells[2]), ['Gamma', 'Beta', 'Alpha'], 'descending sort must reorder rows')
 
     // Switching worksheets rebuilds the grid from the other sheet.
     const picker = dom.window.document.querySelector('select')
