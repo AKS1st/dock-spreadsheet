@@ -12,8 +12,8 @@ const ownCss = `
 .ds-sheet { display:flex; flex-direction:column; height:100%; min-height:0; overflow:hidden; background:var(--dsw-alias-fill-primary,#fff); color:var(--dsw-alias-label-primary,#24292f); font:12px sans-serif }
 .ds-sheet-head { display:flex; align-items:center; flex-wrap:wrap; gap:8px; padding:8px; border-bottom:1px solid #8886; flex:none }
 .ds-sheet-title { font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:35%; }
-.ds-sheet select,.ds-sheet input { background:var(--dsw-alias-fill-control,#fff); color:inherit; border:1px solid #8888; border-radius:4px; padding:4px 6px; min-width:0 }
-.ds-sheet input { flex:1; min-width:110px; max-width:240px }
+.ds-sheet-search { background:var(--dsw-alias-fill-control,#fff); color:inherit; border:1px solid #8888; border-radius:4px; padding:4px 6px; flex:1; min-width:110px; max-width:240px }
+.ds-sheet-search:disabled { opacity:.6 }
 .ds-sheet-grid { flex:1; min-height:0; overflow:hidden }
 .ds-sheet .tabulator { height:100%; background:transparent; color:inherit }
 .ds-sheet .tabulator-header,.ds-sheet .tabulator-row { background:var(--dsw-alias-fill-primary,#fff); color:inherit }
@@ -125,7 +125,7 @@ export function SpreadsheetView({ seed }: ViewProps): ReactNode {
       book && book.SheetNames.length > 0 ? createElement('select', {
         value: sheetName, 'aria-label': '工作表', onChange: (event: { currentTarget: HTMLSelectElement }) => setSheetName(event.currentTarget.value),
       }, ...book.SheetNames.map((name) => createElement('option', { key: name, value: name }, name))) : null,
-      createElement('input', { type: 'search', placeholder: '搜索单元格…', 'aria-label': '搜索单元格', value: query,
+      createElement('input', { type: 'search', className: 'ds-sheet-search', placeholder: '搜索单元格…', 'aria-label': '搜索单元格', value: query,
         onChange: (event: { currentTarget: HTMLInputElement }) => setQuery(event.currentTarget.value), disabled: !sheet }),
       sheet?.truncated ? createElement('span', { title: '超出预览范围的数据未显示' }, `仅预览前 ${MAX_ROWS} 行 / ${MAX_COLUMNS} 列`) : null,
     ),

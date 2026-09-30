@@ -39,6 +39,10 @@ pnpm test        # 构建 + 9 项测试
 
 `pnpm test` 覆盖：xlsx/xls/ods/csv/tsv 解析与单元格取值、偏移坐标与非 UTF-8/公式文本的转义行为、Host 路由的信任栅栏与大小/扩展名/常规文件校验、浏览器产物在仅提供平台 React 时能否加载并注册查看器，以及在 jsdom 中真实挂载 React + Tabulator 后执行搜索、排序、工作表切换。
 
+### 真实 Web 环境验证
+
+在隔离容器内启动真实 `dsh web`（随机端口，不触碰宿主 3080 实例）并用真实 Chromium 驱动，15/15 项通过：dock 客户端挂载、Files 入口注册、文件浏览器渲染、点击工作簿后查看器打开、Tabulator 网格渲染、Host 路由返回 200 与 `application/octet-stream`（实测 16977 字节）、工作表下拉列出 `Data`/`第二页`、单元格文本正确、`<b>bold</b>` 未变成 DOM 元素、搜索过滤生效、切换工作表渲染另一张表。无页面异常，失败响应仅来自该容器已知的 `dsh-sysmon` 环境限制。复现脚本：`dsh-verify/scripts/run-dock-spreadsheet-check.sh`。
+
 ## 安装
 
 需要 `dock` 与 `dock-files`：
