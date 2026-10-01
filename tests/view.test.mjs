@@ -99,9 +99,28 @@ test('real React view mounts Tabulator, searches, sorts and switches sheets', as
     await settle()
 
     assert.ok(dom.window.document.querySelector('.tabulator'), 'grid must mount')
-    assert.deepEqual([...dom.window.document.querySelectorAll('select option')].map((option) => option.value), ['First', 'Second'])
+    const tabs = () => [...dom.window.document.querySelectorAll('.ds-sheet-tab')]
+    assert.deepEqual(tabs().map((tab) => tab.textContent), ['First', 'Second'])
+    assert.equal(tabs()[0].getAttribute('aria-selected'), 'true', 'first sheet is the active tab')
+    assert.equal(dom.window.document.querySelector('.ds-sheet-readonly').textContent, '只读预览')
     assert.deepEqual(rows(dom).map((cells) => cells[2]), ['Alpha', 'Beta', 'Gamma'], 'cells render in worksheet order')
     assert.equal(dom.window.document.querySelector('b'), null, 'cell HTML must never become a DOM element')
+
+    // A click highlights one data cell and reveals its actual coordinate/text.
+    const firstCell = dom.window.document.querySelector('.tabulator-row').querySelectorAll('.tabulator-cell')[1]
+    await act(async () => { firstCell.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true })) })
+    assert.equal(dom.window.document.querySelector('.ds-sheet-address').textContent, 'A1')
+    assert.equal(dom.window.document.querySelector('.ds-sheet-value').textContent, '<b>literal</b>')
+    assert.ok(firstCell.classList.contains('ds-selected-cell'))
+    assert.equal(dom.window.document.querySelector('.ds-sheet-value b'), null, 'inspector is also text only')
+
+    const filterButton = dom.window.document.querySelector('.ds-sheet-tool')
+    assert.equal(filterButton.getAttribute('aria-pressed'), 'false')
+    await act(async () => { filterButton.click() })
+    assert.equal(filterButton.getAttribute('aria-pressed'), 'true')
+    assert.ok(dom.window.document.querySelector('.ds-sheet.ds-filtering'))
+    await act(async () => { filterButton.click() })
+    assert.equal(filterButton.getAttribute('aria-pressed'), 'false')
 
     // A URL inside a cell becomes an anchor; the surrounding text stays intact.
     const anchor = dom.window.document.querySelector('a.ds-url')
@@ -145,11 +164,16 @@ test('real React view mounts Tabulator, searches, sorts and switches sheets', as
     await clickHeader()
     assert.deepEqual(rows(dom).map((cells) => cells[2]), ['Gamma', 'Beta', 'Alpha'], 'descending sort must reorder rows')
 
-    // Switching worksheets rebuilds the grid from the other sheet.
-    const picker = dom.window.document.querySelector('select')
-    await act(async () => { picker.value = 'Second'; picker.dispatchEvent(new dom.window.Event('change', { bubbles: true })) })
+    // Switching worksheets rebuilds the grid and clears stale cell selection.
+    await act(async () => { tabs()[1].click() })
     await settle()
+    assert.equal(tabs()[1].getAttribute('aria-selected'), 'true')
     assert.deepEqual(rows(dom).map((cells) => cells[1]), ['second sheet'])
+    assert.equal(dom.window.document.querySelector('.ds-sheet-address').textContent, '—', 'selection resets on sheet switch')
+    await act(async () => { tabs()[1].dispatchEvent(new dom.window.KeyboardEvent('keydown', { bubbles: true, key: 'ArrowLeft' })) })
+    await settle()
+    assert.equal(tabs()[0].getAttribute('aria-selected'), 'true', 'arrow keys navigate sheet tabs')
+    assert.deepEqual(rows(dom).map((cells) => cells[2]), ['Alpha', 'Beta', 'Gamma'])
   } finally {
     if (root) await act(async () => root.unmount())
     restore()

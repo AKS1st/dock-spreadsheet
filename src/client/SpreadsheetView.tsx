@@ -1,6 +1,7 @@
 import { createElement, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { TabulatorFull as Tabulator, type CellComponent, type ColumnDefinition } from 'tabulator-tables'
 import tabulatorCss from './tabulator-css.generated.ts'
+import { viewerCss } from './styles.ts'
 import { gridSheet, MAX_COLUMNS, MAX_ROWS, parseWorkbook } from './workbook.ts'
 import { splitLinks } from './links.ts'
 import type { ViewProps } from './contract.ts'
@@ -8,27 +9,14 @@ import type { WorkBook } from 'xlsx'
 
 interface Seed { path?: string; title?: string }
 interface ReadError { error?: { message?: string } }
+interface SelectedCell { address: string; value: string }
 const styleId = 'dock-spreadsheet-styles'
-const ownCss = `
-.ds-sheet { display:flex; flex-direction:column; height:100%; min-height:0; overflow:hidden; background:var(--dsw-alias-fill-primary,#fff); color:var(--dsw-alias-label-primary,#24292f); font:12px sans-serif }
-.ds-sheet-head { display:flex; align-items:center; flex-wrap:wrap; gap:8px; padding:8px; border-bottom:1px solid #8886; flex:none }
-.ds-sheet-title { font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:35%; }
-.ds-sheet-search { background:var(--dsw-alias-fill-control,#fff); color:inherit; border:1px solid #8888; border-radius:4px; padding:4px 6px; flex:1; min-width:110px; max-width:240px }
-.ds-sheet-search:disabled { opacity:.6 }
-.ds-sheet-grid { flex:1; min-height:0; overflow:hidden }
-.ds-sheet .tabulator { height:100%; background:transparent; color:inherit }
-.ds-sheet .tabulator-header,.ds-sheet .tabulator-row { background:var(--dsw-alias-fill-primary,#fff); color:inherit }
-.ds-sheet .tabulator-row:nth-child(even) { background:var(--dsw-alias-fill-control,#f4f4f4) }
-.ds-sheet .ds-url { color:var(--dsw-alias-interactive-fg-accent,#0969da); text-decoration:underline; text-underline-offset:2px; cursor:pointer }
-.ds-sheet .ds-url:hover { text-decoration-thickness:2px }
-.ds-sheet-message { padding:16px; overflow:auto }
-`
 let styleUsers = 0
 function mountStyles(): () => void {
   if (styleUsers++ === 0) {
     const style = document.createElement('style')
     style.id = styleId
-    style.textContent = tabulatorCss + ownCss
+    style.textContent = tabulatorCss + viewerCss
     document.head.append(style)
   }
   return () => { if (--styleUsers === 0) document.getElementById(styleId)?.remove() }
@@ -96,8 +84,12 @@ export function SpreadsheetView({ seed }: ViewProps): ReactNode {
   const [query, setQuery] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [filtersVisible, setFiltersVisible] = useState(false)
+  const [selected, setSelected] = useState<SelectedCell | null>(null)
+  const [visibleRows, setVisibleRows] = useState(0)
   const gridRef = useRef<HTMLDivElement>(null)
   const tableRef = useRef<Tabulator | null>(null)
+  const selectedElementRef = useRef<HTMLElement | null>(null)
   // Tabulator rejects and mis-applies filters before initialization, so the
   // latest search term is retained and re-applied once the table is ready.
   const termRef = useRef('')
@@ -105,7 +97,7 @@ export function SpreadsheetView({ seed }: ViewProps): ReactNode {
 
   useEffect(mountStyles, [])
   useEffect(() => {
-    setBook(null); setSheetName(''); setQuery(''); setError('')
+    setBook(null); setSheetName(''); setQuery(''); setError(''); setFiltersVisible(false); setSelected(null); setVisibleRows(0)
     if (!path) { setError('未指定表格文件'); return }
     const controller = new AbortController()
     setLoading(true)
@@ -133,6 +125,9 @@ export function SpreadsheetView({ seed }: ViewProps): ReactNode {
   useEffect(() => {
     const element = gridRef.current
     if (!element || !sheet || sheet.columns.length === 0) return
+    selectedElementRef.current = null
+    setSelected(null)
+    setVisibleRows(sheet.rows.length)
     const columns: ColumnDefinition[] = [
       { title: '#', field: 'rowLabel', width: 65, frozen: true, hozAlign: 'right', headerSort: false },
       ...sheet.columns.map((letter, index) => ({
@@ -146,8 +141,35 @@ export function SpreadsheetView({ seed }: ViewProps): ReactNode {
     })
     tableRef.current = table
     table.on('tableBuilt', () => applyTerm(table, termRef.current))
-    return () => { tableRef.current = null; table.destroy() }
+    table.on('dataFiltered', (_filters, rows) => setVisibleRows(rows.length))
+    // Virtual scrolling can recycle a selected DOM cell for another row. Drop
+    // only its border on redraw; the inspector keeps the last selected value.
+    table.on('renderStarted', () => {
+      selectedElementRef.current?.classList.remove('ds-selected-cell')
+      selectedElementRef.current = null
+    })
+    table.on('cellClick', (_event, cell) => {
+      const field = cell.getColumn().getField()
+      if (!field?.startsWith('c')) return
+      const index = Number(field.slice(1))
+      const letter = sheet.columns[index]
+      if (letter === undefined) return
+      selectedElementRef.current?.classList.remove('ds-selected-cell')
+      const cellElement = cell.getElement()
+      cellElement.classList.add('ds-selected-cell')
+      selectedElementRef.current = cellElement
+      const row = cell.getRow().getData() as Record<string, unknown>
+      setSelected({ address: `${letter}${row.rowLabel}`, value: String(cell.getValue() ?? '') })
+    })
+    return () => { tableRef.current = null; selectedElementRef.current = null; table.destroy() }
   }, [sheet])
+
+  useEffect(() => {
+    const table = tableRef.current
+    if (!table || !isReady(table)) return
+    if (!filtersVisible) table.clearHeaderFilter()
+    table.redraw(true)
+  }, [filtersVisible])
 
   useEffect(() => {
     const term = query.trim().toLocaleLowerCase()
@@ -156,19 +178,52 @@ export function SpreadsheetView({ seed }: ViewProps): ReactNode {
     if (table) applyTerm(table, term)
   }, [query, sheet])
 
-  return createElement('div', { className: 'ds-sheet' },
+  return createElement('div', { className: `ds-sheet${filtersVisible ? ' ds-filtering' : ''}` },
     createElement('div', { className: 'ds-sheet-head' },
+      createElement('span', { className: 'ds-sheet-filemark', 'aria-hidden': true }, '▦'),
       createElement('span', { className: 'ds-sheet-title', title: path }, title ?? path ?? 'Spreadsheet'),
-      book && book.SheetNames.length > 0 ? createElement('select', {
-        value: sheetName, 'aria-label': '工作表', onChange: (event: { currentTarget: HTMLSelectElement }) => setSheetName(event.currentTarget.value),
-      }, ...book.SheetNames.map((name) => createElement('option', { key: name, value: name }, name))) : null,
-      createElement('input', { type: 'search', className: 'ds-sheet-search', placeholder: '搜索单元格…', 'aria-label': '搜索单元格', value: query,
-        onChange: (event: { currentTarget: HTMLInputElement }) => setQuery(event.currentTarget.value), disabled: !sheet }),
-      sheet?.truncated ? createElement('span', { title: '超出预览范围的数据未显示' }, `仅预览前 ${MAX_ROWS} 行 / ${MAX_COLUMNS} 列`) : null,
+      createElement('span', { className: 'ds-sheet-readonly' }, '只读预览'),
+    ),
+    createElement('div', { className: 'ds-sheet-tools' },
+      createElement('div', { className: 'ds-sheet-search-wrap' },
+        createElement('span', { className: 'ds-sheet-search-icon', 'aria-hidden': true }, '⌕'),
+        createElement('input', { type: 'search', className: 'ds-sheet-search', placeholder: '搜索当前工作表…', 'aria-label': '搜索单元格', value: query,
+          onChange: (event: { currentTarget: HTMLInputElement }) => setQuery(event.currentTarget.value), disabled: !sheet }),
+      ),
+      createElement('button', { type: 'button', className: 'ds-sheet-tool', 'aria-pressed': filtersVisible, disabled: !sheet,
+        onClick: () => setFiltersVisible((visible) => !visible) }, '筛选列'),
+      createElement('span', { className: 'ds-sheet-hint' }, '点击单元格查看内容'),
+    ),
+    createElement('div', { className: 'ds-sheet-inspector', 'aria-label': '选中单元格' },
+      createElement('span', { className: 'ds-sheet-address', 'aria-label': '单元格坐标' }, selected?.address ?? '—'),
+      createElement('span', { className: `ds-sheet-value${selected ? '' : ' is-empty'}`, title: selected?.value ?? '' },
+        selected?.value ?? '选择单元格以查看完整内容'),
     ),
     error ? createElement('div', { className: 'ds-sheet-message', role: 'alert' }, error)
       : loading ? createElement('div', { className: 'ds-sheet-message' }, '正在读取表格…')
         : book && (!sheet || sheet.columns.length === 0) ? createElement('div', { className: 'ds-sheet-message' }, '工作表为空') : null,
     createElement('div', { className: 'ds-sheet-grid', ref: gridRef, style: { display: sheet && sheet.columns.length > 0 && !error ? 'block' : 'none' } }),
+    createElement('div', { className: 'ds-sheet-footer' },
+      createElement('div', { className: 'ds-sheet-tabs', role: 'tablist', 'aria-label': '工作表' },
+        ...(book?.SheetNames ?? []).map((name) => createElement('button', {
+          key: name, type: 'button', role: 'tab', className: 'ds-sheet-tab', 'aria-selected': sheetName === name,
+          tabIndex: sheetName === name ? 0 : -1, title: name, onClick: () => setSheetName(name),
+          onKeyDown: (event: { key: string; preventDefault(): void; currentTarget: HTMLButtonElement }) => {
+            const names = book?.SheetNames ?? []
+            const index = names.indexOf(name)
+            const next = event.key === 'ArrowRight' ? (index + 1) % names.length
+              : event.key === 'ArrowLeft' ? (index - 1 + names.length) % names.length
+                : event.key === 'Home' ? 0 : event.key === 'End' ? names.length - 1 : -1
+            if (next < 0 || next === index) return
+            event.preventDefault()
+            const buttons = event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>('.ds-sheet-tab')
+            buttons?.[next]?.focus()
+            setSheetName(names[next] ?? name)
+          },
+        }, name)),
+      ),
+      sheet ? createElement('span', { className: 'ds-sheet-status', title: sheet.truncated ? `仅预览前 ${MAX_ROWS} 行 / ${MAX_COLUMNS} 列` : undefined },
+        `${visibleRows} / ${sheet.rows.length} 行 · ${sheet.columns.length} 列${sheet.truncated ? ' · 预览受限' : ''}`) : null,
+    ),
   )
 }
