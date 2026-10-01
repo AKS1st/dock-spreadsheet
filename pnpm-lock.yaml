@@ -7,16 +7,6 @@ settings:
 importers:
 
   .:
-    dependencies:
-      papaparse:
-        specifier: ^5.7.0
-        version: 5.7.0
-      tabulator-tables:
-        specifier: ^6.3.1
-        version: 6.6.0
-      xlsx:
-        specifier: https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz
-        version: https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz
     devDependencies:
       '@types/node':
         specifier: ^22.0.0
@@ -39,18 +29,27 @@ importers:
       jsdom:
         specifier: ^26.1.0
         version: 26.1.0
+      papaparse:
+        specifier: ^5.7.0
+        version: 5.7.0
       react:
         specifier: ^18.3.1
         version: 18.3.1
       react-dom:
         specifier: ^18.3.1
         version: 18.3.1(react@18.3.1)
+      tabulator-tables:
+        specifier: ^6.3.1
+        version: 6.6.0
       tsdown:
         specifier: ^0.22.14
         version: 0.22.14(typescript@6.0.3)
       typescript:
         specifier: ^6.0.3
         version: 6.0.3
+      xlsx:
+        specifier: https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz
+        version: https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz
 
 packages:
 
