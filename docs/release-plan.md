@@ -1,0 +1,23 @@
+# dock-spreadsheet public release plan
+
+## Goal and authority
+
+User approved public GitHub + npm + awesome-dsh-plugin PR and screenshot registration. The release target is the `dock-spreadsheet` plugin, not the running DSH Web process. No restart of the live GUI. Baseline: `package.json`, current bilingual dock-series READMEs, `src/client/SpreadsheetView.tsx`, the isolated Chromium audit, and current `awesome-dsh-plugin` upstream submission and screenshot rules.
+
+## Architecture and compatibility
+
+This is documentation, packaging metadata and distribution of the existing read-only viewer. Keep parser/runtime/Host contracts and bundled `lib/` unchanged unless verification reveals a defect. npm should be the primary install route once the package is verifiably published; GitHub is a fallback. Screenshot assets must be cropped from the real isolated Web UI and contain only synthetic fixture data, no workspace paths, file explorer, conversation or account information. The main `3080` server is outside the task.
+
+TDD Route: mode off / skipped (no new feature behavior). Verification: install/check/test/build at the release SHA, npm pack dry-run, clean `github:` consumer install, isolated random-port DSH Web + Chromium, repository refs, exact npm registry version, and community PR/check status. No claims of success on an unperformed layer.
+
+## Ordered tasks
+
+1. **Inspect release baseline** (`package.json`, README, upstream community schema, credentials, existing refs): confirm GitHub owner, npm name/version availability, repository existence, existing entry/PR/screenshot keys, branch/commit age gates. Stop if ownership or authorization is unclear.
+2. **Produce public documentation and screenshots** (`README.md`, `README.en.md`, `assets/*.png`, `docs/implementation-plan.md`): document formats, read-only semantics, feature usage, dependencies, npm-first/Git alternatives, permissions and path boundary, limits, security, development, troubleshooting, compatibility and verification; bilingual section parity. Capture real fixture-only viewer screenshot in isolated Chromium at normal and compact widths. Inspect both images for sensitive data. No simulated screenshot passed off as a real run.
+3. **Prepare distributable package** (`package.json`, lock only if needed, `lib/`, `cordis.patch.yml`): add accurate repository/homepage/bugs/keywords metadata and ensure npm pack contains all bundle files but no secrets or unneeded test fixtures. Do not add `prepare`/`postinstall`. Verify scratch Git install with no `allowBuilds` and npm pack dry-run.
+4. **Lock evidence and publish**: complete meaningful source/docs commits on `main`, ensure clean tree and at least 10 genuine commits for the community gate, rerun install/check/test/build/browser checks from the final SHA, then create the GitHub repository under the confirmed owner, push `main` and annotated `v0.1.0` tag, publish version `0.1.0` to official npm registry, and verify Git refs plus exact npm metadata. If credentials or policy block a stage, stop there and report the last verified layer.
+5. **Submit community listing and screenshots**: sync upstream, use a fresh branch from current `main`, add one plugin entry and generated READMEs; submit one PR. Register 1–8 verified GitHub-hosted screenshots in a separate screenshots-only PR from upstream main. Run generation/build/submission gates with `--base`, verify PR/CI; the one-day new-repository age requirement can remain pending without claiming merged or green status.
+
+## Risks and stop conditions
+
+Repository currently has no remote and only five commits; new public repository will initially fail the one-day age gate. GitHub API credentials might be absent even though SSH fetch works; npm `whoami` alone does not prove publish/2FA bypass. These are external gates, not reasons to silently switch channels. An existing complete release must not be duplicated. Do not publish full-page development screenshots with private workspace paths. No destructive cleanup or live DSH process action is authorized.
