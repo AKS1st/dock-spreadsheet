@@ -1,54 +1,47 @@
 # dock-spreadsheet
 
-为 [dock-files](https://github.com/AKS1st/dock-files) 提供独立的只读表格查看器。打开 `.xlsx`、`.xls`、`.ods`、`.csv`、`.tsv` 文件时进入 dock 浮窗；以只读在线表格风格提供工作表切换、单元格坐标与内容预览、列排序、列头筛选、跨单元格搜索和虚拟滚动。首行按数据展示，不擅自当作字段名。显示单元格格式化后的缓存值，不计算公式、执行宏、编辑或保存文件，不承诺还原样式/合并单元格/图表。
+[English](README.en.md) · [简体中文](README.md)
 
-实现依赖 [SheetJS Community Edition](https://docs.sheetjs.com/docs/miscellany/formats/)（Excel/OpenDocument）、[Papa Parse](https://www.papaparse.com/)（CSV/TSV）及 [Tabulator](https://tabulator.info/)（表格交互）。SheetJS 采用官方发布包而非 npm registry 的过期版本。解析器与 Tabulator 样式表都会随 `lib/client.js` 打包，浏览器端不发起 CDN 请求。
+[![npm version](https://img.shields.io/npm/v/dock-spreadsheet.svg)](https://www.npmjs.com/package/dock-spreadsheet) [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE) ![Node.js ≥20](https://img.shields.io/badge/Node.js-%E2%89%A520-43853d)
+
+**为 [dock-files](https://github.com/AKS1st/dock-files) 提供只读在线表格查看器。** 在 [dock](https://github.com/AKS1st/dock) 工作台内打开 XLSX、XLS、ODS、CSV 和 TSV 文件，无需将文件上传到外部服务。使用成熟的 [SheetJS CE](https://docs.sheetjs.com/)、[Papa Parse](https://www.papaparse.com/) 和 [Tabulator](https://tabulator.info/) 实现解析、虚拟滚动与交互；没有 CDN 运行时依赖。
+
+> **范围声明：只读预览。** 本插件不编辑/保存文件，不计算公式或运行宏，也不复刻源文件的字体、颜色、合并单元格、图表或打印布局。
+
+## 效果预览
+
+以下图片来自隔离 `dsh web` + Chromium 实际运行，工作簿内容是虚构测试数据；截图已裁去工作区和会话界面。
+
+![只读表格查看器：工作表标签、选中单元格和数据网格](assets/spreadsheet-viewer.png)
+
+<details>
+<summary>查看列筛选效果</summary>
+
+![列筛选后仅显示匹配行和状态栏计数](assets/spreadsheet-filter.png)
+
+</details>
+
+<details>
+<summary>查看 360px 窄浮窗效果</summary>
+
+![窄浮窗中的表格查看器](assets/spreadsheet-compact.png)
+
+</details>
 
 ## 功能
 
-- **在线表格外观**：灰底字母列头、冻结行号、细网格线、单元格选中高亮和只读信息栏；点击单元格可查看坐标与完整纯文本。紧凑浮窗会自动收起辅助提示，工作表标签支持横向滚动。
-- **工作表切换**：底部标签列出工作簿内所有工作表，支持点击和方向键切换；切换后按该表的行列范围重建表格并清空旧选中态。
-- **URL 识别**：单元格文本中的链接渲染为可点击链接，**Ctrl/⌘+点击**在新标签页打开（`noopener,noreferrer`）；普通点击不跳转。识别范围为显式 `http(s)://` 与 `www.` 前缀，句末标点与不配对括号不计入链接，链接以外的原文逐字保留。锚点用 `textContent` 构造，不经过 `innerHTML`。
-- **排序 / 筛选 / 搜索**：点击列头排序；工具栏“筛选列”按需显示列头筛选框，收起时清空列筛选以避免隐藏的筛选条件；搜索框对当前工作表所有数据列做大小写不敏感的包含匹配，清空即恢复全部行。底部状态栏显示当前可见行数、预览行数与列数。
-- **坐标保真**：首行按数据呈现，不推断表头；行号列显示工作表内真实行号，空白单元格显示为空字符串，偏移起始的工作表（如从 `C3` 开始）按原坐标定位。
-- **虚拟滚动**：表格按可视区渲染，大表不会一次性插入全部行节点。
-
-## 依赖
-
-| 依赖 | 类型 | 说明 |
-| --- | --- | --- |
-| [dock](https://github.com/AKS1st/dock) >= 0.2.0 | peer（必需） | 工作台外壳：`ctx.workbench`、浮窗由它提供 |
-| [dock-files](https://github.com/AKS1st/dock-files) >= 0.1.0 | peer（必需） | 文件域服务：本插件作为 `spreadsheet` 查看器被分发打开 |
-| DSH Web 环境 | 运行时 | 必需，客户端平台为 Web |
-| `cordis` ^4.0.0-rc.7 | peer | 插件框架（DSH 自带） |
-| `react` ^18.2.0 | peer（可选） | 客户端渲染需要；未提供时查看器 UI 不激活 |
-| `xlsx` / `papaparse` / `tabulator-tables` | 内置（构建打包） | 解析与表格交互，随 `lib/client.js` 打包 |
-
-## 限制与安全
-
-- Host 只提供 `POST /dock-spreadsheet/read`，返回原始字节；请求必须通过同源/可信 Host 检查，路径须为绝对路径且扩展名匹配，文件须为常规文件；单文件上限 20 MiB。与其他 dock 查看器一致，允许查看工作区之外由会话指向的绝对路径；**不提供任何写入接口**。
-- 前端只预览每张工作表前 5000 行、256 列，超出时在工具栏提示截断。CSV/TSV 按 UTF-8 解码，非 UTF-8 输入会明确报错而不是静默乱码。
-- 工作簿内容视为不可信数据：单元格一律以纯文本渲染，`<b>` 这类内容不会变成 DOM 元素，也不启用 Tabulator 的 HTML 格式化器。
-- URL 识别只覆盖显式 scheme 与 `www.` 前缀：裸域名（`example.com`）与邮箱地址按普通文本处理，避免在任意表格数据上误判。打开链接是浏览器行为，不受会话工作区边界约束。
-- 预览上限之内，复杂工作簿仍在浏览器主线程解析，超大文件可能短暂卡顿。
-
-## 开发
-
-```sh
-pnpm install
-pnpm run check   # 生成内嵌样式 + 类型检查
-pnpm test        # 构建 + 18 项测试
-```
-
-`pnpm test` 覆盖：xlsx/xls/ods/csv/tsv 解析与单元格取值、偏移坐标与非 UTF-8/公式文本的转义行为、URL 识别（边界、标点裁剪、括号配对、原文完整性）、Host 路由的信任栅栏与大小/扩展名/常规文件校验、浏览器产物在仅提供平台 React 时能否加载并注册查看器，以及在 jsdom 中真实挂载 React + Tabulator 后执行搜索、排序、单元格选中、筛选开关、工作表标签及方向键切换与链接的 Ctrl/⌘+点击。
-
-### 真实 Web 环境验证
-
-在隔离容器内启动真实 `dsh web`（随机端口，不触碰宿主 3080 实例）并用真实 Chromium 驱动，29/29 项通过：dock 客户端挂载、Files 入口注册、文件浏览器分发、Host 路由返回 200 与 `application/octet-stream`（实测 17096 字节）、工作表标签、单元格坐标与纯文本信息栏、只读标识、选中高亮、搜索与可见行数、按需列筛选及收起后清除隐藏条件、切表后选中态复位、URL 的 Ctrl+点击，以及 360px 窄浮窗工具栏和标签未被裁切。无页面异常，失败响应仅来自该容器已知的 `dsh-sysmon` 环境限制。复现脚本：`dsh-verify/scripts/run-dock-spreadsheet-check.sh`。
+- **表格格式**：自动接管 dock-files 中的 `.xlsx`、`.xls`、`.ods`、`.csv`、`.tsv` 文件；多工作表通过底部标签切换，支持方向键、Home/End。
+- **熟悉的网格**：字母列头、冻结的真实行号、细网格线、单元格选中高亮；信息栏展示选中单元格的坐标和纯文本，过长时悬停可查看完整值。第一行始终是数据，不猜测表头。
+- **查找和筛选**：跨当前工作表的数据列搜索；点击列头排序；按需展开每列的筛选框。收起列筛选时自动清空对应条件，避免隐藏筛选。底部显示可见行数 / 预览行数和列数。
+- **链接导航**：识别单元格文本中的 `http://`、`https://` 和 `www.`；**Ctrl+点击**（macOS 为 **⌘+点击**）在新标签页打开，普通点击只选中单元格。裸域名和邮箱不自动识别。
+- **大表预览**：Tabulator 虚拟滚动，仅渲染可见行；窄浮窗下标签可横向滚动，工具栏自动收起辅助提示。
+- **坐标保真**：保留偏移起始工作表的列字母与行号（例如 `C3`）；空白单元格保持为空。
 
 ## 安装
 
-需要 `dock` 与 `dock-files`：
+需要 DSH Web、Node.js ≥20，以及已启用的 [`dock-base`](https://github.com/AKS1st/dock) 和 [`dock-files`](https://github.com/AKS1st/dock-files)。**按顺序安装这三个顶层插件**；基础插件仅作为依赖下载并不等于自动挂载。
+
+### npm（推荐）
 
 ```sh
 dsh plugin --profile web add dock-base
@@ -56,14 +49,60 @@ dsh plugin --profile web add dock-files
 dsh plugin --profile web add dock-spreadsheet
 ```
 
-本地开发用 `link:`：
+### GitHub（备选）
 
 ```sh
-dsh plugin --profile web add link:/absolute/path/to/dock-spreadsheet
+dsh plugin --profile web add github:AKS1st/dock
+dsh plugin --profile web add github:AKS1st/dock-files
+dsh plugin --profile web add github:AKS1st/dock-spreadsheet
 ```
 
-加载器通过 profile 的 `node_modules` 解析 bundle，因此安装必须真正落到该目录（`node_modules/dock-spreadsheet` 可解析），仅修改 `dsh.profile.bundles` 不足以加载。安装要求 profile 目录可写：若该路径位于只读挂载（`/` 为 `ro` 时 `~/.dsh` 就在其上），需先让文件系统可写，否则链接创建会以 `EROFS` 失败。**安装后必须由用户重启 dsh web 才会激活**：插件集合的变更在重启时生效，不要用重启替代验证。
+本地开发可用 `dsh plugin --profile web add link:/absolute/path/to/dock-spreadsheet`。**安装或更新插件后由你重启 dsh web** 才能保证新 bundle 生效；本插件不会自行重启进程。profile 的 `node_modules/dock-spreadsheet` 必须能解析，仅把名字写进 bundle 列表不足以安装；若 profile 位于只读挂载，先解决文件系统可写性。
 
-## License
+## 使用方法
 
-MIT
+1. 在 dock-files 文件浏览器中打开受支持的表格文件，查看器会以 dock 浮窗打开。无需另外寻找活动栏入口。
+2. 点击任意数据单元格，在上方信息栏查看原始表格坐标及文本（过长时悬停查看完整值）。对链接使用 Ctrl/⌘+点击打开新标签页。
+3. 在搜索框输入文本以筛选当前工作表；点击列头排序；点击“筛选列”显示/收起列头筛选输入框。搜索与列筛选可同时生效。
+4. 点击底部工作表标签切换；键盘聚焦标签时可使用 ←/→、Home/End。切表后旧单元格选中态会清空。
+
+## 格式、边界与安全
+
+| 项目 | 实际行为 |
+| --- | --- |
+| Excel / OpenDocument | SheetJS CE 0.20.3 读取 `.xlsx`、`.xls`、`.ods`；显示单元格的格式化/缓存文本，不重新计算公式。 |
+| 分隔文本 | Papa Parse 读取 `.csv`、`.tsv`；严格 UTF-8 解码，编码不符时明确报错。第一行是数据而非自动表头。 |
+| 预览范围 | 每张表从已使用区域起最多预览 **5000 行、256 列**；超出范围在状态栏标记“预览受限”。 |
+| 文件访问 | Host 只提供 `POST /dock-spreadsheet/read` 原始字节读取，检查同源/可信主机、绝对路径、允许扩展名、常规文件及 **20 MiB** 上限；没有写入 API。 |
+| 工作区边界 | 与其他 dock 查看器一致，允许读取会话指向的**工作区外绝对路径**；请勿将插件装入不可信或公开可访问的 Host。 |
+| 内容渲染 | 工作簿内容按不可信数据处理：文本通过 DOM `textContent`/文本节点输出，不使用 `innerHTML`；`<b>` 等输入不会成为 HTML。检测到的链接只允许 `http(s)`，以 `noopener,noreferrer` 打开。 |
+| 性能 | 虚拟滚动降低 DOM 开销，但解析仍在浏览器主线程进行；接近上限的复杂工作簿可能短暂卡顿。 |
+
+本插件不是完整电子表格引擎：不提供编辑、保存、协同、公式求值、宏执行、图表、合并单元格样式复刻或非 UTF-8 CSV 自动猜测。
+
+## 开发与验证
+
+```sh
+pnpm install
+pnpm run check   # 生成内嵌 Tabulator 样式并检查 TypeScript
+pnpm test        # 构建 Host / Client 并运行 18 项测试
+pnpm run build   # 生成需随 GitHub/npm 发布的 lib/
+```
+
+单元/集成测试覆盖五种文件格式、坐标和预览上限、Host 读取防线、浏览器 bundle 注册，以及真实 React + Tabulator 挂载后的搜索、排序、切表、筛选按钮、单元格选中和链接交互。在独立容器中，以随机端口启动真实 `dsh web` 并驱动 Chromium，**29/29 项检查通过**（包括 360px 浮窗、列筛选、HTML 作为文本和 Ctrl+点击）。这不是对用户当前 GUI 热更新或 npm 发布状态的保证。
+
+客户端产物内置 SheetJS、Papa Parse、Tabulator 和样式；浏览器端只将平台提供的 React 保留为外部依赖。GitHub 安装使用仓库已提交的 `lib/`，不需要消费者运行构建脚本，也不声明 `prepare`/`postinstall`。
+
+## 故障排查
+
+| 现象 | 排查 |
+| --- | --- |
+| 文件仍被默认文本查看器打开 | 检查 dock-base、dock-files、dock-spreadsheet 均在 Web profile 的 bundle 列表且依赖可解析；由你重启 dsh web 后再打开。 |
+| 安装时报 `EROFS` | Web profile 的 `node_modules` 位于只读文件系统；使该目录可写后重新安装，不要只改清单。 |
+| CSV/TSV 编码错误 | 将输入转为 UTF-8；查看器不会将其他编码静默显示为乱码。 |
+| 文件太大或未显示全部数据 | 单文件不能超过 20 MiB；每张表最多预览 5000 行/256 列，留意底部“预览受限”。 |
+| Ctrl+点击没打开网页 | 确认单元格文本具有 `http(s)://` 或 `www.` 前缀、点击链接本身，且浏览器没有拦截新标签页。 |
+
+## 许可与致谢
+
+[MIT](LICENSE)。感谢 [SheetJS CE](https://docs.sheetjs.com/)、[Papa Parse](https://www.papaparse.com/) 与 [Tabulator](https://tabulator.info/) 项目。
