@@ -1,7 +1,15 @@
 {
   "name": "dock-spreadsheet",
   "version": "0.1.0",
-  "description": "Read-only spreadsheet viewer for dock-files",
+  "description": "Read-only XLSX, XLS, ODS, CSV and TSV viewer for the DSH dock workbench",
+  "keywords": ["deepseek-harness", "dsh", "dock", "spreadsheet", "xlsx", "csv", "viewer"],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/AKS1st/dock-spreadsheet.git"
+  },
+  "homepage": "https://github.com/AKS1st/dock-spreadsheet#readme",
+  "bugs": "https://github.com/AKS1st/dock-spreadsheet/issues",
+  "publishConfig": { "registry": "https://registry.npmjs.org/" },
   "type": "module",
   "main": "./lib/index.js",
   "types": "./lib/types/index.d.ts",
@@ -22,6 +30,7 @@
     }
   },
   "files": [
+    "assets",
     "lib",
     "cordis.patch.yml"
   ],
