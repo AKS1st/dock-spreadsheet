@@ -3,19 +3,48 @@ import { extname, isAbsolute, resolve } from 'node:path'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 
 export const name = 'dock-spreadsheet'
-export const inject = ['webServer', 'webRuntime']
+/**
+ * Services required before mounting.
+ *
+ * `webRuntime` used to be listed here and supplied `trustedHosts`; DSH 0.2
+ * replaced that service with the `connection` service, which is read lazily
+ * through {@link declaredTrustedHosts} so a host without it still mounts
+ * (loopback-only fence, the pre-0.2 behaviour).
+ */
+export const inject = ['webServer']
 export const MAX_FILE_BYTES = 20 * 1024 * 1024
 const MAX_REQUEST_BYTES = 8192
 const EXTENSIONS = new Set(['.xlsx', '.xls', '.ods', '.csv', '.tsv'])
 
 interface Context {
   webServer: { register(options: { kind: 'prefix'; path: string; handler: (req: IncomingMessage, res: ServerResponse) => Promise<void> }): () => void }
-  webRuntime: { trustedHosts: readonly string[] }
+  /**
+   * Read a service without declaring a hard dependency on it.
+   *
+   * Used for the optional `connection` service: a host that does not provide
+   * it keeps the loopback-only fence instead of failing to mount.
+   */
+  get?(name: string): unknown
   effect(fn: () => void | (() => void), label?: string): void
 }
 
 export class ReadError extends Error {
   constructor(readonly status: number, readonly code: string, message: string) { super(message) }
+}
+
+/**
+ * Authorities this deployment declared besides loopback.
+ *
+ * Read per request from the host's `connection` service (`trustedHosts`), which
+ * DSH 0.2 provides; older hosts exposed the same list on `webRuntime`. A host
+ * with neither keeps the loopback-only fence, never a crash.
+ */
+function declaredTrustedHosts(ctx: Context): readonly string[] {
+  if (typeof ctx.get !== 'function') return []
+  const connection = ctx.get('connection') as { trustedHosts?: readonly string[] } | undefined
+  const declared = connection?.trustedHosts
+  if (!Array.isArray(declared)) return []
+  return declared.filter((entry): entry is string => typeof entry === 'string')
 }
 
 function trusted(req: IncomingMessage, trustedHosts: readonly string[]): boolean {
@@ -75,7 +104,7 @@ export function apply(ctx: Context): void {
   ctx.effect(() => ctx.webServer.register({
     kind: 'prefix', path: '/dock-spreadsheet',
     handler: async (req, res) => {
-      if (!trusted(req, ctx.webRuntime.trustedHosts)) return fail(res, 403, 'forbidden', 'forbidden')
+      if (!trusted(req, declaredTrustedHosts(ctx))) return fail(res, 403, 'forbidden', 'forbidden')
       if (req.method !== 'POST' || new URL(req.url ?? '/', 'http://dsh.internal').pathname !== '/dock-spreadsheet/read') {
         return fail(res, 404, 'not-found', 'unknown route')
       }
