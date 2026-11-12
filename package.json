@@ -1,6 +1,6 @@
 {
   "name": "dock-spreadsheet",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Read-only XLSX, XLS, ODS, CSV and TSV viewer for the DSH dock workbench",
   "keywords": ["deepseek-harness", "dsh", "dock", "spreadsheet", "xlsx", "csv", "viewer"],
   "repository": {
