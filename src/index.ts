@@ -106,16 +106,33 @@ export async function readSpreadsheet(path: string): Promise<Buffer> {
   } finally { await file.close() }
 }
 
+/** Cheap metadata for the client's "file changed" check. */
+export async function statSpreadsheet(path: string): Promise<{ mtimeMs: number; size: number }> {
+  const file = await open(path, 'r')
+  try {
+    const info = await file.stat()
+    if (!info.isFile()) throw new ReadError(400, 'bad-request', 'not a regular file')
+    return { mtimeMs: info.mtimeMs, size: info.size }
+  } finally { await file.close() }
+}
+
 export function apply(ctx: Context): void {
   ctx.effect(() => ctx.webServer.register({
     kind: 'prefix', path: '/dock-spreadsheet',
     handler: async (req, res) => {
       if (!trusted(req, declaredTrustedHosts(ctx))) return fail(res, 403, 'forbidden', 'forbidden')
-      if (req.method !== 'POST' || new URL(req.url ?? '/', 'http://dsh.internal').pathname !== '/dock-spreadsheet/read') {
+      const pathname = new URL(req.url ?? '/', 'http://dsh.internal').pathname
+      if (req.method !== 'POST' || (pathname !== '/dock-spreadsheet/read' && pathname !== '/dock-spreadsheet/stat')) {
         return fail(res, 404, 'not-found', 'unknown route')
       }
       try {
         const path = await requestPath(req)
+        if (pathname === '/dock-spreadsheet/stat') {
+          const value = await statSpreadsheet(path)
+          res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' })
+          res.end(JSON.stringify({ ok: true, value }))
+          return
+        }
         const bytes = await readSpreadsheet(path)
         res.writeHead(200, { 'content-type': 'application/octet-stream', 'content-length': bytes.length, 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' })
         res.end(bytes)

@@ -34,5 +34,10 @@ export declare class ReadError extends Error {
     constructor(status: number, code: string, message: string);
 }
 export declare function readSpreadsheet(path: string): Promise<Buffer>;
+/** Cheap metadata for the client's "file changed" check. */
+export declare function statSpreadsheet(path: string): Promise<{
+    mtimeMs: number;
+    size: number;
+}>;
 export declare function apply(ctx: Context): void;
 export {};

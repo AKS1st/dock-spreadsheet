@@ -6,11 +6,13 @@
 
 **A read-only spreadsheet viewer for [dock-files](https://github.com/AKS1st/dock-files).** Open XLSX, XLS, ODS, CSV and TSV files inside the [dock](https://github.com/AKS1st/dock) workbench without uploading them to an external service. Parsing, virtual scrolling and grid interactions use [SheetJS CE](https://docs.sheetjs.com/), [Papa Parse](https://www.papaparse.com/) and [Tabulator](https://tabulator.info/). No runtime CDN requests are required.
 
-> **Scope: read-only preview.** The plugin does not edit or save files, evaluate formulas, run macros, or reproduce source fonts, colors, merged cells, charts or print layouts.
+> **Scope: read-only preview.** The plugin does not edit or save files, evaluate formulas, or run macros. Since 0.2 it shows formula text, solid fills, column widths, merged ranges and hidden rows/columns/sheets, but it does **not** reproduce fonts, borders, alignment, conditional formatting, charts, images or print layouts; merged cells use an approximation (anchor cell + blank covered cells + an inspector badge).
+
+> For maximum Excel-like fidelity use DeepSeek Harness' built-in right-side document preview. This plugin is a lightweight, searchable, copyable **data browser**; see [Relationship to the native Harness preview](#relationship-to-the-native-harness-preview).
 
 ## Screenshots
 
-These screenshots come from an actual isolated `dsh web` + Chromium run using a synthetic workbook. They show only the viewer, with the workspace and conversation UI cropped out.
+These screenshots come from a 0.1.x isolated `dsh web` + Chromium run using a synthetic workbook. The 0.2 formula bar, copy/export and refresh controls are not shown.
 
 ![Read-only spreadsheet viewer with sheet tabs, selected cell and data grid](assets/spreadsheet-viewer.png)
 
@@ -31,11 +33,32 @@ These screenshots come from an actual isolated `dsh web` + Chromium run using a 
 ## Features
 
 - **Common file types:** dock-files dispatches `.xlsx`, `.xls`, `.ods`, `.csv` and `.tsv` to the viewer. Switch worksheets using bottom tabs, including arrow keys and Home/End.
-- **Familiar grid:** lettered columns, frozen actual row numbers, fine gridlines and a selected-cell outline. A read-only inspector displays the cell address and text; hover over truncated values to see the full text. The first row stays data; no header inference.
-- **Find and filter:** search across the current worksheet's data columns, click a column header to sort, and reveal per-column header filters on demand. Hiding the filter controls clears column filters so no invisible constraint remains. The footer displays visible / preview rows and column count.
-- **Link navigation:** recognise `http://`, `https://` and `www.` in cells. **Ctrl+click** (or **⌘+click** on macOS) opens a new tab; a plain click only selects the cell. Bare domains and email addresses are not auto-linked.
-- **Large-sheet preview:** Tabulator's virtual rendering limits DOM nodes to visible rows. Sheet tabs can scroll horizontally in a narrow floating window, where secondary toolbar hints are hidden.
+- **Read-only formula bar:** select a cell to see the actual formula (preferred) or the displayed text. Program-generated formulas without a cached result show `=formula` plus a “no cache” badge instead of an empty cell.
+- **Copy and export:** drag-select a range and press Ctrl/⌘+C (TSV + HTML table, ready to paste into Excel); the toolbar offers “Copy selection / Copy view / Export CSV”.
+- **Structure metadata:** column widths, solid fills, number formats, merged ranges (anchor + blank covered cells + inspector badge) and hidden rows/columns. Hidden worksheets stay hidden by default and can be revealed with the “hidden sheets” toggle.
+- **Refresh:** the `↻` button re-reads the file. While open, the Host checks the file mtime every 4 seconds and shows “file changed, reload” instead of replacing what you are reading.
+- **Find and filter:** search across the current worksheet's data columns, click a column header to sort (numeric/date columns sort by type), and reveal per-column header filters on demand.
+- **Link navigation:** recognise `http(s)://`, `www.` and Excel hyperlink objects in cells. **Ctrl+click** (or **⌘+click** on macOS) opens a new tab.
+- **Large-sheet preview:** Tabulator's virtual rendering limits DOM nodes to visible rows. The footer shows visible rows/columns, the source totals and a truncated-preview marker.
 - **Coordinate fidelity:** keep the original column letters and row numbers for sheets starting at an offset such as `C3`; empty cells remain empty.
+
+### New in 0.2.0
+
+- Formula bar and no-cache formula notice; type-aware numeric/date sorting.
+- Range selection, copy selection/view and CSV export.
+- Hidden sheet/hidden row/column toggles; column widths, fills and merged-range display.
+- Refresh button and change notice; UTF-16 BOM/GBK fallback and delimiter sniffing for CSV/TSV.
+- Fixed four invalid CSS tokens that left a white background in dark mode.
+
+## Relationship to the native Harness preview
+
+| Need | Recommended |
+| --- | --- |
+| Fonts, borders, conditional formatting, charts, maximum Excel fidelity | Harness right-side document preview |
+| Fast data lookup, search/filter, copy/export, formula inspection, ODS, lightweight floating window | This plugin |
+| Very large or complex workbooks | The native preview is capped at 16 MiB / 250k cells; this plugin accepts 20 MiB but still parses on the main thread, so very large files may pause the UI |
+
+Both can be installed side by side.
 
 ## The dock plugin family
 
@@ -79,34 +102,36 @@ For local development, use `dsh plugin --profile web add link:/absolute/path/to/
 ## Usage
 
 1. Open a supported file in the dock-files explorer. The viewer appears in a dock floating window; it does not add a separate activity-bar item.
-2. Click a data cell to inspect its original worksheet coordinate and text (hover over a long value to see it in full). Ctrl/⌘+click a detected link to open it in a new tab.
-3. Search to filter the current worksheet; click a column header to sort; press the column-filter button to show or hide header inputs. Search and column filtering can be combined.
-4. Click a worksheet tab to switch sheets, or focus a tab and use ←/→ or Home/End. Switching clears the previous cell selection.
+2. Click a data cell: the formula bar shows its formula (or `=formula` plus a “no cache” badge); the inspector also shows the address, comment and merged-range markers.
+3. Drag-select cells or hold Shift to extend the range, then Ctrl/⌘+C; or use the “Copy selection / Copy view / Export” buttons.
+4. Search to filter the current worksheet; click a column header to sort; press the column-filter button to show/hide header inputs.
+5. Click a worksheet tab to switch sheets; reveal hidden worksheets/hidden rows and columns with the corresponding toggles.
+6. When the file changes externally, click “reload” in the notice, or press `↻` at any time.
 
 ## Formats, limits and security
 
 | Topic | Actual behavior |
 | --- | --- |
-| Excel / OpenDocument | SheetJS CE 0.20.3 reads `.xlsx`, `.xls` and `.ods`; cached/formatted cell text is displayed without recalculating formulas. |
-| Delimited text | Papa Parse reads `.csv` and `.tsv` using strict UTF-8 decoding; invalid encoding reports an error. The first row remains data. |
-| Preview window | At most **5,000 rows and 256 columns** from each worksheet's used range; the footer marks truncated previews. |
-| File access | The Host exposes only `POST /dock-spreadsheet/read` for raw bytes. It checks same-origin/trusted-host requests, absolute path, allowed extension, regular file and a **20 MiB** limit. There is no write API. |
+| Excel / OpenDocument | SheetJS CE 0.20.3 reads `.xlsx`, `.xls` and `.ods`; displays cached/formatted text without recalculating formulas. Formula text, solid fills, column widths, hidden rows/columns/sheets and merged ranges are exposed. |
+| Delimited text | Papa Parse reads `.csv` and `.tsv`; accepts UTF-8 (with or without BOM), BOM-marked UTF-16, and falls back to GBK when UTF-8 fails; the delimiter (`,`/`\t`/`;`/`|`) is sniffed from the first rows. The first row remains data. |
+| Preview window | At most **5,000 rows and 256 columns** from each worksheet's used range; the footer shows source totals and a truncated-preview marker. |
+| File access | The Host exposes `POST /dock-spreadsheet/read` for raw bytes and `POST /dock-spreadsheet/stat` for mtime/size. Both check same-origin/trusted-host requests, an absolute path, an allowed extension and a regular file; reads are capped at **20 MiB** and there is no write API. |
 | Workspace boundary | Like other dock viewers, the Host may read an **absolute path outside the workspace** referenced by the session. Do not deploy this plugin on an untrusted or publicly reachable Host. |
-| Cell rendering | Treat workbook content as untrusted: render via DOM text nodes / `textContent`, never `innerHTML`; `<b>` in a cell stays text. Detected links use only HTTP(S) and open with `noopener,noreferrer`. |
+| Cell rendering | Treat workbook content as untrusted: render via DOM text nodes / `textContent`, never `innerHTML`; `<b>` in a cell stays text. Links use only HTTP(S) and open with `noopener,noreferrer`. |
 | Performance | Virtual scrolling reduces DOM work, but parsing still runs on the browser main thread; a complex workbook near the limits may briefly pause the UI. |
 
-This is not a full spreadsheet engine: no editing, saving, collaboration, formula evaluation, macro execution, chart rendering, source-style/merged-cell fidelity or automatic encoding detection for non-UTF-8 CSV.
+This is not a full spreadsheet engine: no editing, saving, collaboration, formula evaluation, macros, chart/image rendering, font/border/alignment/conditional-formatting/frozen-pane fidelity, or automatic encoding detection beyond UTF-8/UTF-16/GBK.
 
 ## Development and verification
 
 ```sh
 pnpm install
 pnpm run check   # embed Tabulator styles and check TypeScript
-pnpm test        # build Host / Client and run 18 tests
+pnpm test        # build Host / Client and run 21 tests
 pnpm run build   # produce lib/ for GitHub/npm distribution
 ```
 
-Unit/integration tests cover all five formats, coordinates and preview limits, Host read guards, browser bundle registration, and a real React + Tabulator mount exercising search, sort, sheet tabs, column-filter controls, cell selection and link interactions. A real `dsh web` on a random port in an isolated container, driven by Chromium, passed **29/29 checks**, including 360px layout, column filtering, HTML-as-text and Ctrl+click. This does not claim that your current GUI has hot-reloaded, or that npm publication succeeded.
+Unit/integration tests cover all five formats, formulas including no-cache cells, hidden sheets, column widths/merges, UTF-16/GBK/delimiter handling, coordinates and preview limits, Host read/stat guards, browser bundle registration, and a real React + Tabulator mount exercising the formula bar, search, numeric sorting, copy-view, refresh, hidden sheets and link interactions. The isolated-container Chromium checks were **not re-run** after the 0.2 changes; re-run them before a release.
 
 The client artifact bundles SheetJS, Papa Parse, Tabulator and their styles; only platform React remains external in the browser. GitHub consumers use committed `lib/` files, without a consumer build step or `prepare`/`postinstall` script.
 
@@ -116,9 +141,11 @@ The client artifact bundles SheetJS, Papa Parse, Tabulator and their styles; onl
 | --- | --- |
 | A workbook still opens in the default text viewer | Confirm dock-base, dock-files and dock-spreadsheet are enabled as Web-profile bundles and their packages resolve. Restart dsh web yourself, then reopen the file. |
 | Install fails with `EROFS` | The Web profile's `node_modules` is on a read-only filesystem. Make the directory writable and reinstall rather than editing only the manifest. |
-| CSV/TSV encoding error | Convert the file to UTF-8. The viewer will not silently display a different encoding as garbled text. |
-| File rejected or data seems incomplete | Files over 20 MiB are rejected; each sheet previews at most 5,000 rows/256 columns. Check the footer for a truncated-preview indicator. |
-| Ctrl+click does not open a link | The cell must contain an `http(s)://` or `www.` prefix; click the link itself and check whether the browser blocked a new tab. |
+| A formula shows `=...` with “no cache” | The file was generated by openpyxl/XlsxWriter and has no saved result; the plugin can only show the formula. Re-save it once in Excel to obtain cached values. |
+| CSV/TSV encoding error | Try saving as UTF-8; the viewer also attempts GBK but may still fail. |
+| Copy fails | The browser may refuse clipboard writes; focus the page and allow clipboard access, or use “Export CSV”. |
+| File rejected or data seems incomplete | Files over 20 MiB are rejected; each sheet previews at most 5,000 rows/256 columns; the footer shows source totals. |
+| Ctrl+click does not open a link | The cell text or hyperlink object must contain `http(s)://` or `www.`; check whether the browser blocked a new tab. |
 
 ## License and acknowledgements
 
