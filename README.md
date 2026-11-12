@@ -37,6 +37,23 @@
 - **大表预览**：Tabulator 虚拟滚动，仅渲染可见行；窄浮窗下标签可横向滚动，工具栏自动收起辅助提示。
 - **坐标保真**：保留偏移起始工作表的列字母与行号（例如 `C3`）；空白单元格保持为空。
 
+## dock 系列插件
+
+dock 生态是一组可组合的插件，本插件只提供其中一块能力。全部可选，按需安装：
+
+| 插件 | 作用 |
+| --- | --- |
+| [dock-base](https://github.com/AKS1st/dock) | 工作台基座：活动栏 / 侧边栏 / 编辑器区 / 状态栏与 `ctx.workbench` 注册表 |
+| [dock-files](https://github.com/AKS1st/dock-files) | 文件浏览器：会话工作区目录树、新建/重命名/删除、拖放与粘贴导入 |
+| [dock-editor](https://github.com/AKS1st/dock-editor) | 文本查看/编辑：撤销重做、Ctrl+S 保存、二进制检测 |
+| [dock-images](https://github.com/AKS1st/dock-images) | 图片查看：PNG/JPEG/GIF/WebP/BMP/SVG/ICO/AVIF |
+| [dock-markdown](https://github.com/AKS1st/dock-markdown) | Markdown 查看：GFM 渲染、大纲、相对路径资源 |
+| [dock-media](https://github.com/AKS1st/dock-media) | 音视频播放：HTTP Range 流式、纯音频播放器与全屏视频 |
+| [dock-git](https://github.com/AKS1st/dock-git) | Git 历史：泳道提交图、分支/标签、暂存与提交 |
+| [dock-spreadsheet](https://github.com/AKS1st/dock-spreadsheet) | 只读表格：XLSX/XLS/ODS/CSV/TSV |
+
+本插件是 **dock-spreadsheet**；完整组合建议见 dock-base 的「推荐搭配插件」一节。
+
 ## 安装
 
 需要 DSH Web、Node.js ≥20，以及已启用的 [`dock-base`](https://github.com/AKS1st/dock) 和 [`dock-files`](https://github.com/AKS1st/dock-files)。**按顺序安装这三个顶层插件**；基础插件仅作为依赖下载并不等于自动挂载。
